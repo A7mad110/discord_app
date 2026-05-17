@@ -112,18 +112,94 @@ const Auth = ({ onLogin }) => {
   );
 };
 
-// Friends Panel Component
-const FriendsPanel = ({ friends, onSelectDM, onAddFriend, currentDM }) => {
+// Friends Panel Component - Real API version
+const FriendsPanel = ({ token, user, onSelectDM, currentDM, onAddFriend }) => {
   const [showAddFriend, setShowAddFriend] = useState(false);
-  const [friendUsername, setFriendUsername] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [friends, setFriends] = useState([]);
+  const [receivedRequests, setReceivedRequests] = useState([]);
   const [inviteLink, setInviteLink] = useState('');
   const [showInvite, setShowInvite] = useState(false);
 
-  const handleAddFriend = () => {
-    if (friendUsername.trim()) {
-      onAddFriend(friendUsername);
-      setFriendUsername('');
-      setShowAddFriend(false);
+  // Fetch friends on mount
+  useEffect(() => {
+    fetchFriends();
+  }, [token]);
+
+  const fetchFriends = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/friends`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      setFriends(data.friends || []);
+      setReceivedRequests(data.receivedRequests || []);
+    } catch (error) {
+      console.error('Error fetching friends:', error);
+    }
+  };
+
+  const handleSearch = async (query) => {
+    setSearchQuery(query);
+    if (query.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    try {
+      const response = await fetch(`${API_URL}/api/users/search?q=${query}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      setSearchResults(data);
+    } catch (error) {
+      console.error('Error searching:', error);
+    }
+  };
+
+  const handleAddFriend = async (friendUsername) => {
+    try {
+      const response = await fetch(`${API_URL}/api/friends/request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ username: friendUsername })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        alert('✅ تم إرسال طلب الصداقة!');
+        setShowAddFriend(false);
+        setSearchQuery('');
+        setSearchResults([]);
+      } else {
+        alert('❌ ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error adding friend:', error);
+    }
+  };
+
+  const handleAcceptRequest = async (requestId) => {
+    try {
+      const response = await fetch(`${API_URL}/api/friends/accept`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ requestId })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        alert('✅ تم قبول طلب الصداقة!');
+        fetchFriends();
+      } else {
+        alert('❌ ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error accepting request:', error);
     }
   };
 
@@ -148,12 +224,24 @@ const FriendsPanel = ({ friends, onSelectDM, onAddFriend, currentDM }) => {
         <div className="add-friend-form">
           <input
             type="text"
-            placeholder="اسم المستخدم"
-            value={friendUsername}
-            onChange={(e) => setFriendUsername(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddFriend()}
+            placeholder="ابحث عن صديق..."
+            value={searchQuery}
+            onChange={(e) => handleSearch(e.target.value)}
           />
-          <button onClick={handleAddFriend}>أضف</button>
+          {searchResults.length > 0 && (
+            <div className="search-results">
+              {searchResults.map((result) => (
+                <div 
+                  key={result.id} 
+                  className="search-result-item"
+                  onClick={() => handleAddFriend(result.username)}
+                >
+                  <span>{(result.username || 'U')[0].toUpperCase()}</span>
+                  <span>{result.username}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -169,6 +257,18 @@ const FriendsPanel = ({ friends, onSelectDM, onAddFriend, currentDM }) => {
         </div>
       )}
 
+      {receivedRequests.length > 0 && (
+        <div className="friend-requests">
+          <div className="requests-header">طلبات الصداقة:</div>
+          {receivedRequests.map((req) => (
+            <div key={req.id} className="request-item">
+              <span>{req.fromUsername}</span>
+              <button onClick={() => handleAcceptRequest(req.id)}>قبول ✅</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="friends-list">
         {friends.length === 0 ? (
           <div className="no-friends">لا يوجد أصدقاء بعد</div>
@@ -179,10 +279,10 @@ const FriendsPanel = ({ friends, onSelectDM, onAddFriend, currentDM }) => {
               className={`friend-item ${currentDM === friend.username ? 'active' : ''}`}
               onClick={() => onSelectDM(friend.username)}
             >
-              <div className="friend-avatar">{(friend.username || 'U')[0].toUpperCase()}</div>
+              <div className="friend-avatar">{friend.username?.[0]?.toUpperCase() || 'U'}</div>
               <div className="friend-info">
                 <span className="friend-name">{friend.username}</span>
-                <span className="friend-status">متصل 🟢</span>
+                <span className="friend-status">{friend.status === 'online' ? 'متصل 🟢' : 'غير متصل'}</span>
               </div>
             </div>
           ))
@@ -201,9 +301,7 @@ const DirectMessage = ({ otherUser, currentUser }) => {
   useEffect(() => {
     // Listen for DM messages
     socketService.onDirectMessage((msg) => {
-      if (msg.from === otherUser || msg.to === otherUser || msg.to === 'all') {
-        setMessages(prev => [...prev, msg]);
-      }
+      setMessages(prev => [...prev, msg]);
     });
 
     return () => {
@@ -219,16 +317,7 @@ const DirectMessage = ({ otherUser, currentUser }) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
 
-    const msg = {
-      id: Date.now(),
-      from: currentUser,
-      to: otherUser,
-      content: newMessage,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-
     socketService.sendDirectMessage(otherUser, newMessage);
-    setMessages([...messages, msg]);
     setNewMessage('');
   };
 
@@ -240,13 +329,13 @@ const DirectMessage = ({ otherUser, currentUser }) => {
       </div>
 
       <div className="chat-messages">
-        {messages.map((msg) => (
-          <div key={msg.id} className="message">
+        {messages.map((msg, index) => (
+          <div key={index} className="message">
             <div className="message-avatar">{(msg.from || 'U')[0].toUpperCase()}</div>
             <div className="message-content">
               <div className="message-header">
                 <span className="message-author">{msg.from}</span>
-                <span className="message-time">{msg.time}</span>
+                <span className="message-time">{msg.time || ''}</span>
               </div>
               <div className="message-text">{msg.content}</div>
             </div>
@@ -277,8 +366,7 @@ const Sidebar = ({
   onChannelChange, 
   onLogout,
   user,
-  friends,
-  onAddFriend,
+  token,
   onSelectDM,
   currentDM
 }) => {
@@ -289,10 +377,11 @@ const Sidebar = ({
       </div>
 
       <FriendsPanel
-        friends={friends}
+        token={token}
+        user={user}
         onSelectDM={onSelectDM}
-        onAddFriend={onAddFriend}
         currentDM={currentDM}
+        onAddFriend={() => {}}
       />
 
       <div className="channels-section">
@@ -626,7 +715,6 @@ function App() {
   const [currentChannel, setCurrentChannel] = useState('general');
   const [currentVoiceChannel, setCurrentVoiceChannel] = useState(null);
   const [currentDM, setCurrentDM] = useState(null);
-  const [friends, setFriends] = useState([]);
 
   // Check for existing session
   useEffect(() => {
@@ -679,13 +767,6 @@ function App() {
     setCurrentDM(dm);
   };
 
-  const handleAddFriend = (username) => {
-    if (!friends.find(f => f.username === username)) {
-      setFriends([...friends, { username }]);
-      alert(`تم إضافة ${username} كصديق! 🎉`);
-    }
-  };
-
   const handleSelectDM = (username) => {
     setCurrentDM(username);
     setCurrentChannel(null);
@@ -704,8 +785,7 @@ function App() {
         onChannelChange={handleChannelChange}
         onLogout={handleLogout}
         user={user}
-        friends={friends}
-        onAddFriend={handleAddFriend}
+        token={token}
         onSelectDM={handleSelectDM}
         currentDM={currentDM}
       />

@@ -24,7 +24,9 @@ const db = {
   voiceChannels: [
     { id: 'voice-general', name: 'Voice General' },
     { id: 'voice-gaming', name: 'Voice Gaming' }
-  ]
+  ],
+  friends: [], // { id, userId, friendId, status: 'accepted', createdAt }
+  friendRequests: [] // { id, fromId, fromUsername, toUsername, status: 'pending', createdAt }
 };
 
 // Auth endpoints
@@ -147,6 +149,202 @@ app.get('/api/messages/:channelId', (req, res) => {
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', users: db.users.length, messages: db.messages.length });
+});
+
+// Friends API endpoints
+// Search users by username
+app.get('/api/users/search', (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const { q } = req.query;
+
+    if (!q || q.length < 2) {
+      return res.json([]);
+    }
+
+    // Search users (excluding current user)
+    const results = db.users
+      .filter(u => u.id !== decoded.userId && u.username.toLowerCase().includes(q.toLowerCase()))
+      .map(u => ({ id: u.id, username: u.username }))
+      .slice(0, 10);
+
+    res.json(results);
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
+// Get user's friends list
+app.get('/api/friends', (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    // Get accepted friendships
+    const friendships = db.friends
+      .filter(f => f.userId === decoded.userId && f.status === 'accepted')
+      .map(f => {
+        const friend = db.users.find(u => u.id === f.friendId);
+        return friend ? { id: friend.id, username: friend.username, status: 'online' } : null;
+      })
+      .filter(f => f !== null);
+
+    // Get pending sent requests
+    const sentRequests = db.friendRequests
+      .filter(r => r.fromId === decoded.userId && r.status === 'pending')
+      .map(r => ({ id: r.id, toUsername: r.toUsername, status: 'sent' }));
+
+    // Get pending received requests
+    const receivedRequests = db.friendRequests
+      .filter(r => r.toUsername === db.users.find(u => u.id === decoded.userId)?.username && r.status === 'pending' && r.fromId !== decoded.userId)
+      .map(r => ({ id: r.id, fromId: r.fromId, fromUsername: r.fromUsername, status: 'received' }));
+
+    res.json({ friends: friendships, sentRequests, receivedRequests });
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
+// Send friend request
+app.post('/api/friends/request', (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const { username } = req.body;
+
+    if (!username) {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+
+    const currentUser = db.users.find(u => u.id === decoded.userId);
+    const targetUser = db.users.find(u => u.username === username);
+
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (targetUser.id === decoded.userId) {
+      return res.status(400).json({ error: 'Cannot add yourself' });
+    }
+
+    // Check if already friends
+    const existing = db.friends.find(f => 
+      (f.userId === decoded.userId && f.friendId === targetUser.id) ||
+      (f.userId === targetUser.id && f.friendId === decoded.userId)
+    );
+    if (existing) {
+      return res.status(400).json({ error: 'Already friends' });
+    }
+
+    // Check if request already exists
+    const existingRequest = db.friendRequests.find(r => 
+      r.fromId === decoded.userId && r.toUsername === username && r.status === 'pending'
+    );
+    if (existingRequest) {
+      return res.status(400).json({ error: 'Request already sent' });
+    }
+
+    // Create friend request
+    const request = {
+      id: uuidv4(),
+      fromId: decoded.userId,
+      fromUsername: currentUser.username,
+      toUsername: username,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    db.friendRequests.push(request);
+
+    res.json({ success: true, message: 'Friend request sent!' });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Accept friend request
+app.post('/api/friends/accept', (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const { requestId } = req.body;
+
+    const request = db.friendRequests.find(r => r.id === requestId && r.status === 'pending');
+    if (!request) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+
+    const currentUser = db.users.find(u => u.id === decoded.userId);
+    if (request.toUsername !== currentUser.username) {
+      return res.status(400).json({ error: 'Request not for you' });
+    }
+
+    // Find the sender
+    const sender = db.users.find(u => u.id === request.fromId);
+    if (!sender) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Add friendship both ways
+    db.friends.push({
+      id: uuidv4(),
+      userId: decoded.userId,
+      friendId: sender.id,
+      status: 'accepted',
+      createdAt: new Date().toISOString()
+    });
+
+    db.friends.push({
+      id: uuidv4(),
+      userId: sender.id,
+      friendId: decoded.userId,
+      status: 'accepted',
+      createdAt: new Date().toISOString()
+    });
+
+    // Remove the request
+    request.status = 'accepted';
+
+    res.json({ success: true, message: 'Friend request accepted!' });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get all online users (for voice room display)
+app.get('/api/users/online', (req, res) => {
+  try {
+    const onlineUsers = [];
+    users.forEach((info) => {
+      const user = db.users.find(u => u.id === info.userId);
+      if (user) {
+        onlineUsers.push({ id: user.id, username: user.username });
+      }
+    });
+    res.json(onlineUsers);
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // Initialize Socket.io
