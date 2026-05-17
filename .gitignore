@@ -8,3 +8,4 @@ npm-debug.log*
 .env.production
 *.asar
 electron-builder-cache/
+DiscordApp-Portable.zip
