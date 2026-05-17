@@ -90,9 +90,9 @@ const Auth = ({ onLogin }) => {
         </form>
         <div className="auth-switch">
           {isLogin ? (
-            <>ما عندك حساب؟ <a onClick={() => setIsLogin(false)}>سجل الآن</a></>
+            <>ما عندك حساب؟ <button type="button" onClick={() => setIsLogin(false)} style={{ background: 'none', border: 'none', color: '#5865f2', cursor: 'pointer', textDecoration: 'underline' }}>سجل الآن</button></>
           ) : (
-            <>عندك حساب؟ <a onClick={() => setIsLogin(true)}>سجل دخول</a></>
+            <>عندك حساب؟ <button type="button" onClick={() => setIsLogin(true)} style={{ background: 'none', border: 'none', color: '#5865f2', cursor: 'pointer', textDecoration: 'underline' }}>سجل دخول</button></>
           )}
         </div>
       </div>
@@ -276,6 +276,7 @@ const VoiceChannel = ({ channel, token }) => {
   const videoRef = useRef(null);
 
   const { 
+    // eslint-disable-next-line no-unused-vars
     peers, 
     localStream, 
     screenStream, 

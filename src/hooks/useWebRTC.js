@@ -130,6 +130,7 @@ export const useWebRTC = (channelId) => {
       }
       socketService.leaveVoice(channelId);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId, getLocalStream, createPeer]);
 
   // Handle WebRTC signaling
