@@ -1,6 +1,18 @@
 import io from 'socket.io-client';
 
-const SOCKET_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
+// Use environment variable or fallback to localhost for dev, hardcode for production build
+const getServerUrl = () => {
+  if (process.env.REACT_APP_SERVER_URL) {
+    return process.env.REACT_APP_SERVER_URL;
+  }
+  // For Electron builds, try to read from window.location or use production URL
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return window.location.origin;
+  }
+  return 'https://discord-app-y247.onrender.com';
+};
+
+const SOCKET_URL = getServerUrl();
 
 class SocketService {
   constructor() {

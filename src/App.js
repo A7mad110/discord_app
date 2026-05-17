@@ -3,7 +3,18 @@ import socketService from './services/socketService';
 import useWebRTC from './hooks/useWebRTC';
 import './index.css';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+// Use environment variable or fallback to production URL for Electron builds
+const getApiUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return window.location.origin;
+  }
+  return 'https://discord-app-y247.onrender.com';
+};
+
+const API_URL = getApiUrl();
 
 // Auth Component
 const Auth = ({ onLogin }) => {
