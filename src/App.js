@@ -15,6 +15,7 @@ const getApiUrl = () => {
 };
 
 const API_URL = getApiUrl();
+const APP_URL = typeof window !== 'undefined' ? (window.location.origin || 'https://inspiring-granita-3408e3.netlify.app') : 'https://inspiring-granita-3408e3.netlify.app';
 
 // Auth Component
 const Auth = ({ onLogin }) => {
@@ -111,26 +112,201 @@ const Auth = ({ onLogin }) => {
   );
 };
 
+// Friends Panel Component
+const FriendsPanel = ({ friends, onSelectDM, onAddFriend, currentDM }) => {
+  const [showAddFriend, setShowAddFriend] = useState(false);
+  const [friendUsername, setFriendUsername] = useState('');
+  const [inviteLink, setInviteLink] = useState('');
+  const [showInvite, setShowInvite] = useState(false);
+
+  const handleAddFriend = () => {
+    if (friendUsername.trim()) {
+      onAddFriend(friendUsername);
+      setFriendUsername('');
+      setShowAddFriend(false);
+    }
+  };
+
+  const copyInviteLink = () => {
+    const link = `${APP_URL}?invite=true`;
+    navigator.clipboard.writeText(link);
+    setInviteLink('تم النسخ! 📋');
+    setTimeout(() => setInviteLink(''), 2000);
+  };
+
+  return (
+    <div className="friends-panel">
+      <div className="friends-header">
+        <span>الأصدقاء 👥</span>
+        <div className="friends-actions">
+          <button onClick={() => setShowAddFriend(!showAddFriend)} title="إضافة صديق">➕</button>
+          <button onClick={() => setShowInvite(!showInvite)} title="رابط الدعوة">🔗</button>
+        </div>
+      </div>
+
+      {showAddFriend && (
+        <div className="add-friend-form">
+          <input
+            type="text"
+            placeholder="اسم المستخدم"
+            value={friendUsername}
+            onChange={(e) => setFriendUsername(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddFriend()}
+          />
+          <button onClick={handleAddFriend}>أضف</button>
+        </div>
+      )}
+
+      {showInvite && (
+        <div className="invite-section">
+          <p>شارك هذا الرابط مع صديقك:</p>
+          <div className="invite-link-box">
+            <code>{APP_URL}?invite=true</code>
+          </div>
+          <button onClick={copyInviteLink} className="copy-btn">
+            {inviteLink || 'نسخ الرابط'}
+          </button>
+        </div>
+      )}
+
+      <div className="friends-list">
+        {friends.length === 0 ? (
+          <div className="no-friends">لا يوجد أصدقاء بعد</div>
+        ) : (
+          friends.map((friend, index) => (
+            <div
+              key={index}
+              className={`friend-item ${currentDM === friend.username ? 'active' : ''}`}
+              onClick={() => onSelectDM(friend.username)}
+            >
+              <div className="friend-avatar">{(friend.username || 'U')[0].toUpperCase()}</div>
+              <div className="friend-info">
+                <span className="friend-name">{friend.username}</span>
+                <span className="friend-status">متصل 🟢</span>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Direct Message Component
+const DirectMessage = ({ otherUser, currentUser }) => {
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    // Listen for DM messages
+    socketService.onDirectMessage((msg) => {
+      if (msg.from === otherUser || msg.to === otherUser || msg.to === 'all') {
+        setMessages(prev => [...prev, msg]);
+      }
+    });
+
+    return () => {
+      socketService.offDirectMessage();
+    };
+  }, [otherUser]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSend = (e) => {
+    e.preventDefault();
+    if (!newMessage.trim()) return;
+
+    const msg = {
+      id: Date.now(),
+      from: currentUser,
+      to: otherUser,
+      content: newMessage,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    socketService.sendDirectMessage(otherUser, newMessage);
+    setMessages([...messages, msg]);
+    setNewMessage('');
+  };
+
+  return (
+    <>
+      <div className="chat-header">
+        <span style={{ color: '#5865f2' }}>@</span>
+        <span className="chat-header-title">محادثة خاصة مع {otherUser}</span>
+      </div>
+
+      <div className="chat-messages">
+        {messages.map((msg) => (
+          <div key={msg.id} className="message">
+            <div className="message-avatar">{(msg.from || 'U')[0].toUpperCase()}</div>
+            <div className="message-content">
+              <div className="message-header">
+                <span className="message-author">{msg.from}</span>
+                <span className="message-time">{msg.time}</span>
+              </div>
+              <div className="message-text">{msg.content}</div>
+            </div>
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
+
+      <div className="chat-input-container">
+        <form onSubmit={handleSend}>
+          <input
+            type="text"
+            className="chat-input"
+            placeholder={`رسالة خاصة لـ ${otherUser}`}
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+          />
+        </form>
+      </div>
+    </>
+  );
+};
+
 // Sidebar Component
-const Sidebar = ({ currentChannel, currentVoiceChannel, onChannelChange, onLogout }) => {
+const Sidebar = ({ 
+  currentChannel, 
+  currentVoiceChannel, 
+  onChannelChange, 
+  onLogout,
+  user,
+  friends,
+  onAddFriend,
+  onSelectDM,
+  currentDM
+}) => {
   return (
     <div className="sidebar">
       <div className="server-header">
         <span className="server-name">🎮 Discord App</span>
       </div>
 
+      <FriendsPanel
+        friends={friends}
+        onSelectDM={onSelectDM}
+        onAddFriend={onAddFriend}
+        currentDM={currentDM}
+      />
+
       <div className="channels-section">
         <div className="channel-category">📝 النصوص</div>
         <div
-          className={`channel-item ${currentChannel === 'general' && !currentVoiceChannel ? 'active' : ''}`}
-          onClick={() => onChannelChange('general', null)}
+          className={`channel-item ${currentChannel === 'general' && !currentVoiceChannel && !currentDM ? 'active' : ''}`}
+          onClick={() => onChannelChange('general', null, null)}
         >
           <span className="channel-icon">#</span>
           <span className="channel-name">شات عام</span>
         </div>
         <div
-          className={`channel-item ${currentChannel === 'random' && !currentVoiceChannel ? 'active' : ''}`}
-          onClick={() => onChannelChange('random', null)}
+          className={`channel-item ${currentChannel === 'random' && !currentVoiceChannel && !currentDM ? 'active' : ''}`}
+          onClick={() => onChannelChange('random', null, null)}
         >
           <span className="channel-icon">#</span>
           <span className="channel-name">حوارات عشوائية</span>
@@ -139,14 +315,14 @@ const Sidebar = ({ currentChannel, currentVoiceChannel, onChannelChange, onLogou
         <div className="channel-category">🔊 الصوتي</div>
         <div
           className={`voice-item ${currentVoiceChannel === 'voice-general' ? 'active' : ''}`}
-          onClick={() => onChannelChange(null, 'voice-general')}
+          onClick={() => onChannelChange(null, 'voice-general', null)}
         >
           <span>🔊</span>
           <span>روم صوتي عام</span>
         </div>
         <div
           className={`voice-item ${currentVoiceChannel === 'voice-gaming' ? 'active' : ''}`}
-          onClick={() => onChannelChange(null, 'voice-gaming')}
+          onClick={() => onChannelChange(null, 'voice-gaming', null)}
         >
           <span>🔊</span>
           <span>روم جيمينق</span>
@@ -154,9 +330,9 @@ const Sidebar = ({ currentChannel, currentVoiceChannel, onChannelChange, onLogou
       </div>
 
       <div className="user-panel" onClick={onLogout} style={{ cursor: 'pointer' }}>
-        <div className="user-avatar-small">U</div>
+        <div className="user-avatar-small">{(user?.username?.[0] || 'U').toUpperCase()}</div>
         <div className="user-info">
-          <div className="user-name">مستخدم</div>
+          <div className="user-name">{user?.username || 'مستخدم'}</div>
           <div className="user-status-text">متصل ✓</div>
         </div>
         <div style={{ marginLeft: 'auto', color: '#b9bbbe', fontSize: '12px' }}>خروج</div>
@@ -287,8 +463,6 @@ const VoiceChannel = ({ channel, token }) => {
   const videoRef = useRef(null);
 
   const { 
-    // eslint-disable-next-line no-unused-vars
-    peers, 
     localStream, 
     screenStream, 
     isScreenSharing, 
@@ -451,6 +625,8 @@ function App() {
   const [token, setToken] = useState(null);
   const [currentChannel, setCurrentChannel] = useState('general');
   const [currentVoiceChannel, setCurrentVoiceChannel] = useState(null);
+  const [currentDM, setCurrentDM] = useState(null);
+  const [friends, setFriends] = useState([]);
 
   // Check for existing session
   useEffect(() => {
@@ -468,6 +644,13 @@ function App() {
         localStorage.removeItem('discord_user');
       }
     }
+
+    // Check for invite in URL
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('invite') === 'true') {
+      // Show invite message
+      alert('🎉 تم دعوتك! سجل دخول وانضم لصديقك!');
+    }
   }, []);
 
   const handleLogin = (userData, authToken) => {
@@ -484,14 +667,29 @@ function App() {
     setToken(null);
     setCurrentChannel('general');
     setCurrentVoiceChannel(null);
+    setCurrentDM(null);
   };
 
-  const handleChannelChange = (textChannel, voiceChannel) => {
+  const handleChannelChange = (textChannel, voiceChannel, dm) => {
     if (currentVoiceChannel && currentVoiceChannel !== voiceChannel) {
       socketService.leaveVoice(currentVoiceChannel);
     }
     setCurrentChannel(textChannel || currentChannel);
     setCurrentVoiceChannel(voiceChannel);
+    setCurrentDM(dm);
+  };
+
+  const handleAddFriend = (username) => {
+    if (!friends.find(f => f.username === username)) {
+      setFriends([...friends, { username }]);
+      alert(`تم إضافة ${username} كصديق! 🎉`);
+    }
+  };
+
+  const handleSelectDM = (username) => {
+    setCurrentDM(username);
+    setCurrentChannel(null);
+    setCurrentVoiceChannel(null);
   };
 
   if (!user) {
@@ -505,10 +703,17 @@ function App() {
         currentVoiceChannel={currentVoiceChannel}
         onChannelChange={handleChannelChange}
         onLogout={handleLogout}
+        user={user}
+        friends={friends}
+        onAddFriend={handleAddFriend}
+        onSelectDM={handleSelectDM}
+        currentDM={currentDM}
       />
 
       <div className="chat-area">
-        {currentVoiceChannel ? (
+        {currentDM ? (
+          <DirectMessage otherUser={currentDM} currentUser={user.username} />
+        ) : currentVoiceChannel ? (
           <VoiceChannel channel={currentVoiceChannel} token={token} />
         ) : (
           <TextChat channel={currentChannel} token={token} />

@@ -307,6 +307,42 @@ io.on('connection', (socket) => {
     socket.to(`voice:${channelId}`).emit('screen_share_stopped', { socketId: socket.id });
   });
 
+  // Direct Messages (DM)
+  socket.on('send_dm', ({ to, content }) => {
+    const userInfo = users.get(socket.id);
+    if (!userInfo) return;
+
+    const dm = {
+      id: uuidv4(),
+      from: userInfo.username,
+      to,
+      content,
+      createdAt: new Date().toISOString()
+    };
+
+    // Find the target user's socket and send to them
+    let targetSocket = null;
+    users.forEach((info, socketId) => {
+      if (info.username === to) {
+        targetSocket = socketId;
+      }
+    });
+
+    // Send to recipient
+    if (targetSocket) {
+      io.to(targetSocket).emit('new_dm', {
+        ...dm,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      });
+    }
+
+    // Also send back to sender
+    socket.emit('new_dm', {
+      ...dm,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    });
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     const userInfo = users.get(socket.id);

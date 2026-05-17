@@ -199,6 +199,25 @@ class SocketService {
       this.socket.on('screen_share_stopped', callback);
     }
   }
+
+  // Direct Message methods
+  sendDirectMessage(to, content) {
+    if (this.socket) {
+      this.socket.emit('send_dm', { to, content });
+    }
+  }
+
+  onDirectMessage(callback) {
+    if (this.socket) {
+      this.socket.on('new_dm', callback);
+    }
+  }
+
+  offDirectMessage() {
+    if (this.socket) {
+      this.socket.off('new_dm');
+    }
+  }
 }
 
 const socketService = new SocketService();
