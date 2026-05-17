@@ -1,0 +1,66 @@
+{
+  "name": "discord-app",
+  "version": "1.0.0",
+  "description": "A Discord-like application with chat, voice, and screen sharing",
+  "main": "src/main/main.js",
+  "author": "Discord App Developer",
+  "scripts": {
+    "start": "concurrently \"npm run server\" \"npm run react-dev\"",
+    "server": "node server/index.js",
+    "react-dev": "react-scripts start",
+    "build": "react-scripts build",
+    "electron-build": "electron-builder",
+    "dist": "npm run build && npm run electron-build"
+  },
+  "homepage": "./",
+  "build": {
+    "appId": "com.discord.app",
+    "productName": "Discord App",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "build/**/*",
+      "src/main/**/*"
+    ],
+    "extraMetadata": {
+      "main": "src/main/main.js"
+    }
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "simple-peer": "^9.11.1",
+    "socket.io": "^4.6.1",
+    "socket.io-client": "^4.6.1",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "wait-on": "^7.2.0"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
